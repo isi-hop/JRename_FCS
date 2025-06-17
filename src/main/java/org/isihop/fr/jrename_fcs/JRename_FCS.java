@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -25,6 +27,7 @@ public class JRename_FCS {
     String dblogin = "";
     String dbpassword = "";
     String srcPath = "";
+    String dstPath = "";
     String extension = "";
 
     List<String> listFichier = new ArrayList<>();
@@ -70,6 +73,7 @@ public class JRename_FCS {
                 dblogin = p.getProperty("dblogin", "postgres");
                 dbpassword = p.getProperty("dbpassword", "password");
                 srcPath = p.getProperty("srcpath", "e:/echanges/cmf/");
+                dstPath= p.getProperty("dstpath", "e:/echanges/cmf/kaluza");
                 extension = p.getProperty("extension", "fcs");
             } catch (IOException ex) {
                 logger.log(Level.SEVERE, ex.getMessage());
@@ -114,9 +118,9 @@ public class JRename_FCS {
         //lire le nom et récupérer le numero d'échantillon
         numechantillon=extraire_numechantillon(fichier);
         //rechercher en base les données correspondantes
-        nouveauNom=recherher_donnee(numechantillon);
+        nouveauNom=recherher_donnee(numechantillon.trim());
         //renommer le fichier
-        renommer_fichier (fichier,nouveauNom);
+        renommer_et_deplacer_fichier(fichier,nouveauNom,dstPath);
         } //fin pour
         close_db(); //fermer db
     }
@@ -162,12 +166,12 @@ public class JRename_FCS {
     private String recherher_donnee(String numechantillon) {
         String retour="";
         try {
-            String sql="SELECT echantillon,object,nature,analyse FROM public.patients WHERE echantillon='"+numechantillon+"'";
+            String sql="SELECT echantillon,object,nature,panel FROM public.patients WHERE echantillon='"+numechantillon+"'";
             
-            ResultSet rs =stmt.executeQuery(sql);
-            rs.next();
-            retour=rs.getString(1)+"_"+rs.getString(2)+"_"+rs.getString(3)+"_"+rs.getString(4);            
-            rs.close();
+            try (ResultSet rs = stmt.executeQuery(sql)) {
+                rs.next();
+                retour=rs.getString(1)+"_"+rs.getString(2)+"_"+rs.getString(3)+"_"+rs.getString(4);
+            }
             
         } catch (SQLException ex) {
             logger.log(Level.SEVERE, "NUM ligne : {0}   {1}", new Object[]{numechantillon, ex.getMessage()});
@@ -195,9 +199,30 @@ public class JRename_FCS {
      * @param fichier
      * @param nouveauNom 
      *********************************/
-    private void renommer_fichier(String fichier, String nouveauNom) {
-      File f=new File(fichier);
-      f.renameTo(new File(nouveauNom+"."+extension));
+    private boolean renommer_et_deplacer_fichier(String fichiersource, String nouveauNom, String destination) {
+        File fichierSource = new File(fichiersource);
+        File dossierDest = new File(destination);
+
+        // Vérifie si le fichier source existe
+       if (!fichierSource.exists()) {
+        System.out.println("Le fichier source n'existe pas.");
+        return false;
+        }
+
+        // Crée le dossier de destination s'il n'existe pas
+        if (!dossierDest.exists()) {dossierDest.mkdirs();}
+
+        // Crée le chemin complet du nouveau fichier
+        File fichierDestination = new File(dossierDest, nouveauNom+"."+extension);
+
+        try {
+            Files.move(fichierSource.toPath(), fichierDestination.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            System.out.println("Fichier déplacé et renommé avec succès !");
+            return true;
+        } catch (IOException e) {
+            System.out.println("Erreur lors du déplacement : " + e.getMessage());
+            return false;
+        }  
     }
 
 }
