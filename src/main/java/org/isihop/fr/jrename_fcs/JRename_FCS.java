@@ -166,11 +166,11 @@ public class JRename_FCS {
     private String recherher_donnee(String numechantillon) {
         String retour="";
         try {
-            String sql="SELECT echantillon,object,nature,panel FROM public.patients WHERE echantillon='"+numechantillon+"'";
+            String sql="SELECT echantillon,object,panel FROM public.patients WHERE echantillon='"+numechantillon+"'";
             
             try (ResultSet rs = stmt.executeQuery(sql)) {
                 rs.next();
-                retour=rs.getString(1)+"_"+rs.getString(2)+"_"+rs.getString(3)+"_"+rs.getString(4);
+                retour=rs.getString(1)+"_"+rs.getString(2)+"_"+rs.getString(3);
             }
             
         } catch (SQLException ex) {
@@ -188,8 +188,10 @@ public class JRename_FCS {
     private String extraire_numechantillon(String fichier) {
         String numEchantillon="";
         
-        int posPoint=fichier.lastIndexOf(".");
-         numEchantillon = numEchantillon.substring(0, posPoint);
+        int posPoint=fichier.lastIndexOf("."); //couper au point d'extension
+         numEchantillon = fichier.substring(0, posPoint);
+        posPoint=numEchantillon.lastIndexOf("\\"); //couper au dernier /
+        numEchantillon = numEchantillon.substring(posPoint+1);
         return numEchantillon;
     }
 
