@@ -11,6 +11,8 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -116,9 +118,10 @@ public class JRename_FCS {
         for (String fichier:listFichier)
         {
         //lire le nom et récupérer le numero d'échantillon
-        numechantillon=extraire_numechantillon(fichier);
+        String fichier_reduit=new File(fichier).getName().trim();
+        numechantillon=extraire_numechantillon(fichier_reduit);
         //rechercher en base les données correspondantes
-        nouveauNom=recherher_donnee(numechantillon.trim());
+        nouveauNom=recherher_donnee(numechantillon,fichier_reduit);
         //renommer le fichier
         renommer_et_deplacer_fichier(fichier,nouveauNom,dstPath);
         } //fin pour
@@ -163,14 +166,14 @@ public class JRename_FCS {
      * @param laLigne
      * @return 
      *******************************/
-    private String recherher_donnee(String numechantillon) {
-        String retour="";
+    private String recherher_donnee(String numechantillon,String nom_fichier) {
+        String retour=nom_fichier.substring(0, nom_fichier.lastIndexOf("."));
         try {
-            String sql="SELECT echantillon,object,panel FROM public.patients WHERE echantillon='"+numechantillon+"'";
+            String sql="SELECT object,panel FROM public.patients WHERE echantillon='"+numechantillon+"'";
             
             try (ResultSet rs = stmt.executeQuery(sql)) {
                 rs.next();
-                retour=rs.getString(1)+"_"+rs.getString(2)+"_"+rs.getString(3);
+                retour=retour+"_"+rs.getString(1)+"_"+rs.getString(2);
             }
             
         } catch (SQLException ex) {
@@ -187,11 +190,12 @@ public class JRename_FCS {
      ********************************/
     private String extraire_numechantillon(String fichier) {
         String numEchantillon="";
-        
-        int posPoint=fichier.lastIndexOf("."); //couper au point d'extension
-         numEchantillon = fichier.substring(0, posPoint);
-        posPoint=numEchantillon.lastIndexOf("\\"); //couper au dernier /
-        numEchantillon = numEchantillon.substring(posPoint+1);
+        //Format d'echantillon fcs => [251672590001][SCREEN SLP]SCREEN SLP DF1 20250618 1118.fcs
+        //rechercher le premier [ + 1 et le premier ]
+        //extraite le nom seul avec extension
+        int posPointDeb=fichier.indexOf("["); //couper au premier [
+        int posPointFin=fichier.indexOf("]"); //couper au premier ]
+        numEchantillon = fichier.substring(posPointDeb+1, posPointFin);
         return numEchantillon;
     }
 
@@ -201,7 +205,10 @@ public class JRename_FCS {
      * @param fichier
      * @param nouveauNom 
      *********************************/
-    private boolean renommer_et_deplacer_fichier(String fichiersource, String nouveauNom, String destination) {
+    private boolean renommer_et_deplacer_fichier(String fichiersource, String nouveauNom, String destination) 
+    {
+
+        destination=destination+"/"+LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));        
         File fichierSource = new File(fichiersource);
         File dossierDest = new File(destination);
 
