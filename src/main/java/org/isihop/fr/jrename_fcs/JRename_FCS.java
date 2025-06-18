@@ -14,6 +14,7 @@ import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
@@ -28,11 +29,10 @@ public class JRename_FCS {
     String dburl = "";
     String dblogin = "";
     String dbpassword = "";
-    String srcPath = "";
+    List<String> srcPathList;
+    String srcPathStrList="";
     String dstPath = "";
     String extension = "";
-
-    List<String> listFichier = new ArrayList<>();
 
     //database
     Connection conn;
@@ -49,9 +49,12 @@ public class JRename_FCS {
         //lire properties
         lire_properties();
         //lister les fichiers FCS du dossier source
+        srcPathList=new ArrayList<>(Arrays.asList(srcPathStrList.split(",")));
+        
+        connect_db(); //connecter DB 
         lister_fichiers();
-        //traiter la liste des fichiers
-        traiter_fichiers();
+        close_db(); //fermer db
+
     }
 
     /**
@@ -74,7 +77,7 @@ public class JRename_FCS {
                 dburl = p.getProperty("dburl", "jdbc:postgresql://vm296.ch-v.net:5432/cmf");
                 dblogin = p.getProperty("dblogin", "postgres");
                 dbpassword = p.getProperty("dbpassword", "password");
-                srcPath = p.getProperty("srcpath", "e:/echanges/cmf/");
+                srcPathStrList = p.getProperty("srcpathlist", "e:/echanges/cmf/");
                 dstPath= p.getProperty("dstpath", "e:/echanges/cmf/kaluza");
                 extension = p.getProperty("extension", "fcs");
             } catch (IOException ex) {
@@ -96,13 +99,18 @@ public class JRename_FCS {
      * Lister tous les fichiers CSV du dossier local fichiers
      *****************************
      */
-    private void lister_fichiers() {
-        File[] filesInDirectory = new File(srcPath).listFiles();
-        for (File f : filesInDirectory) {
-            String filePath = f.getAbsolutePath();
-            String fileExtenstion = filePath.substring(filePath.lastIndexOf(".") + 1, filePath.length());
-            if (extension.equals(fileExtenstion)) {
-                listFichier.add(filePath);
+    private void lister_fichiers() 
+    {
+        for (String srcPath:srcPathList)
+        {
+            File[] filesInDirectory = new File(srcPath).listFiles();
+            for (File f : filesInDirectory) //pour chaque fichier du dossier
+            {
+                String filePath = f.getAbsolutePath();
+                String fileExtenstion = filePath.substring(filePath.lastIndexOf(".") + 1, filePath.length());
+                if (extension.equals(fileExtenstion)) {
+                    traiter_fichiers(filePath);
+                }
             }
         }
     }
@@ -110,13 +118,10 @@ public class JRename_FCS {
     /********************************
      * Renommer les fichiers
      ********************************/
-    private void traiter_fichiers() {
+    private void traiter_fichiers(String fichier) 
+    {
         String numechantillon="";
         String nouveauNom="";
-        connect_db(); //connecter DB
-        //pour :chaque fichier
-        for (String fichier:listFichier)
-        {
         //lire le nom et récupérer le numero d'échantillon
         String fichier_reduit=new File(fichier).getName().trim();
         numechantillon=extraire_numechantillon(fichier_reduit);
@@ -124,8 +129,6 @@ public class JRename_FCS {
         nouveauNom=recherher_donnee(numechantillon,fichier_reduit);
         //renommer le fichier
         renommer_et_deplacer_fichier(fichier,nouveauNom,dstPath);
-        } //fin pour
-        close_db(); //fermer db
     }
     
     
@@ -134,7 +137,8 @@ public class JRename_FCS {
      * Si non possible pas de traitement
      * @return boolean
      ****************************/
-    private boolean connect_db() {
+    private boolean connect_db() 
+    {
         boolean isconnected=false;
         try {
             Class.forName("org.postgresql.Driver");
@@ -152,7 +156,8 @@ public class JRename_FCS {
     /*********************************
      * Fermer la database si possible.
      *********************************/
-    private void close_db() {
+    private void close_db() 
+    {
         try {
             stmt.close();
             conn.close();
@@ -166,7 +171,8 @@ public class JRename_FCS {
      * @param laLigne
      * @return 
      *******************************/
-    private String recherher_donnee(String numechantillon,String nom_fichier) {
+    private String recherher_donnee(String numechantillon,String nom_fichier) 
+    {
         String retour=nom_fichier.substring(0, nom_fichier.lastIndexOf("."));
         try {
             String sql="SELECT object,panel FROM public.patients WHERE echantillon='"+numechantillon+"'";
@@ -188,7 +194,8 @@ public class JRename_FCS {
      * @param fichier
      * @return 
      ********************************/
-    private String extraire_numechantillon(String fichier) {
+    private String extraire_numechantillon(String fichier) 
+    {
         String numEchantillon="";
         //Format d'echantillon fcs => [251672590001][SCREEN SLP]SCREEN SLP DF1 20250618 1118.fcs
         //rechercher le premier [ + 1 et le premier ]
@@ -207,7 +214,6 @@ public class JRename_FCS {
      *********************************/
     private boolean renommer_et_deplacer_fichier(String fichiersource, String nouveauNom, String destination) 
     {
-
         destination=destination+"/"+LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));        
         File fichierSource = new File(fichiersource);
         File dossierDest = new File(destination);
