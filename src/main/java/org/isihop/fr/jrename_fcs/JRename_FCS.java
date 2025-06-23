@@ -4,8 +4,12 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -19,6 +23,8 @@ import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  *
@@ -33,6 +39,8 @@ public class JRename_FCS {
     String srcPathStrList="";
     String dstPath = "";
     String extension = "";
+    String action="";
+    boolean supression=false;
 
     //database
     Connection conn;
@@ -80,6 +88,8 @@ public class JRename_FCS {
                 srcPathStrList = p.getProperty("srcpathlist", "e:/echanges/cmf/");
                 dstPath= p.getProperty("dstpath", "e:/echanges/cmf/kaluza");
                 extension = p.getProperty("extension", "fcs");
+                action=p.getProperty("action","move");
+                supression=Boolean.parseBoolean(p.getProperty("supression", "false"));
             } catch (IOException ex) {
                 logger.log(Level.SEVERE, ex.getMessage());
             }
@@ -103,13 +113,29 @@ public class JRename_FCS {
     {
         for (String srcPath:srcPathList)
         {
-            File[] filesInDirectory = new File(srcPath).listFiles();
-            for (File f : filesInDirectory) //pour chaque fichier du dossier
+            File[] directoriesInDirectory = new File(srcPath).listFiles(); //lister tous les dossiers
+            for (File d : directoriesInDirectory) //pour chaque dossier du dossier source
             {
-                String filePath = f.getAbsolutePath();
-                String fileExtenstion = filePath.substring(filePath.lastIndexOf(".") + 1, filePath.length());
-                if (extension.equals(fileExtenstion)) {
-                    traiter_fichiers(filePath);
+                if (d.isDirectory())
+                {
+                    String dirPath = d.getAbsolutePath();
+                    File[] filesInDirectory = new File(dirPath).listFiles();
+                    for (File f : filesInDirectory) //pour chaque ficihier du sous dossier
+                    {
+                        String filePath = f.getAbsolutePath();
+                        String fileExtenstion = filePath.substring(filePath.lastIndexOf(".") + 1, filePath.length());
+                        if (extension.equals(fileExtenstion)) {traiter_fichiers(filePath);}
+                    }
+                } //fin traitement sous dossier
+                //on peut supprimer si nécessaire la source ici
+                if (supression) 
+                {
+                    try {
+                        supprimerRecursivement(d.toPath());
+                    } catch (IOException ex) 
+                    {
+                        Logger.getLogger(JRename_FCS.class.getName()).log(Level.SEVERE, null, ex);
+                    }
                 }
             }
         }
@@ -126,7 +152,7 @@ public class JRename_FCS {
         String fichier_reduit=new File(fichier).getName().trim();
         numechantillon=extraire_numechantillon(fichier_reduit);
         //rechercher en base les données correspondantes
-        nouveauNom=recherher_donnee(numechantillon,fichier_reduit);
+        nouveauNom=rechercher_donnees(numechantillon,fichier_reduit);
         //renommer le fichier
         renommer_et_deplacer_fichier(fichier,nouveauNom,dstPath);
     }
@@ -171,7 +197,7 @@ public class JRename_FCS {
      * @param laLigne
      * @return 
      *******************************/
-    private String recherher_donnee(String numechantillon,String nom_fichier) 
+    private String rechercher_donnees(String numechantillon,String nom_fichier) 
     {
         String retour=nom_fichier.substring(0, nom_fichier.lastIndexOf("."));
         try {
@@ -199,10 +225,14 @@ public class JRename_FCS {
         String numEchantillon="";
         //Format d'echantillon fcs => [251672590001][SCREEN SLP]SCREEN SLP DF1 20250618 1118.fcs
         //rechercher le premier [ + 1 et le premier ]
-        //extraite le nom seul avec extension
-        int posPointDeb=fichier.indexOf("["); //couper au premier [
-        int posPointFin=fichier.indexOf("]"); //couper au premier ]
-        numEchantillon = fichier.substring(posPointDeb+1, posPointFin);
+        //extraite le nom seul avec extension        
+        Pattern pt=Pattern.compile("\\b\\d{12}\\b");
+        Matcher m=pt.matcher(fichier);
+
+        if (m.find()) {
+        numEchantillon = fichier.substring(m.start(), m.end());
+        }
+        
         return numEchantillon;
     }
 
@@ -231,7 +261,8 @@ public class JRename_FCS {
         File fichierDestination = new File(dossierDest, nouveauNom+"."+extension);
 
         try {
-            Files.move(fichierSource.toPath(), fichierDestination.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            if (action.compareToIgnoreCase("copy")==0) {Files.copy(fichierSource.toPath(), fichierDestination.toPath(), StandardCopyOption.REPLACE_EXISTING);}
+            if (action.compareToIgnoreCase("move")==0) {Files.move(fichierSource.toPath(), fichierDestination.toPath(), StandardCopyOption.REPLACE_EXISTING);}
             System.out.println("Fichier déplacé et renommé avec succès !");
             return true;
         } catch (IOException e) {
@@ -239,5 +270,31 @@ public class JRename_FCS {
             return false;
         }  
     }
+    
+    
+    /****************************************
+     * Supprimer récursivement les fichiers et dossiers
+     * @param chemin
+     * @throws IOException 
+     ****************************************/
+    public static void supprimerRecursivement(Path chemin) throws IOException 
+    {
+        Files.walkFileTree(chemin, new SimpleFileVisitor<Path>() 
+        {
+            @Override
+            public FileVisitResult visitFile(Path fichier, BasicFileAttributes attrs) throws IOException {
+            Files.delete(fichier);
+            return FileVisitResult.CONTINUE;
+        }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dossier, IOException exc) throws IOException 
+            {
+                Files.delete(dossier);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
 
 }
